@@ -1,0 +1,247 @@
+jenkins --> CI for the java app (addressbook.war)
+
+deploy this 
+
+CD 
+
+docker containers to deploy the application
+
+maven --> pom.xml as an input 
+
+validate
+compile
+test
+package
+verify
+install 
+deploy 
+
+
+mvn test --> 1+2+3
+mvn package --> 1+2+3+4
+
+mvn package --> compile+test+package
+
+/var/lib/jenkins/workspace/ci-job/target/addressbook.war
+
+===================
+cmd to install maven--
+
+wget https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz
+sudo mkdir -p /opt/maven
+sudo tar -xvzf apache-maven-3.9.9-bin.tar.gz -C /opt/maven/ --strip-components=1
+sudo ln -s /opt/maven/bin/mvn /usr/bin/mvn
+mvn --version 
+====================
+
+1. ci-job --> JOB_NAME
+2. execution number (2) -->  BUILD_NUMBER
+3. user jenkins executes the job
+4. /var/lib/jenkins/workspace/$JOB_NAME/ --->  job execution happens here 
+5. /var/lib/jenkins/workspace/$JOB_NAME/target/addressbook.war --> artifact location 
+
+
+artifact --> /var/lib/jenkins/workspace/$JOB_NAME/target/addressbook.war
+
+1. containarize this (docker present)  apt install docker.io -y (done)
+
+2. Image for my app AB.war   (pipeline script)
+    2.1 --> write a dockerfile 
+	2.2 --> docker build myapp:1.0 .
+	2.3 --> docker tag
+	2.4 --> docker login
+	2.5 --> docker push 
+	
+3. deploy it as a container (docker run)  --> (pipeline script)
+
+
+4. jenkins user willbe running the docker commands so jenkins user should have permission to execue docker commands (done)
+
+chown root:jenkins /var/run/docker.sock
+
+
+5. how will I pass my dockerhub credentials in pipeline to push the image to dockerhub
+   5.1 store the credentials in the jenkins global credentials and use that in pipeline
+           id of credentials is dockerhub = jsachdev07 + password123456
+   5.2 how will I pass the credential id (dockerhub) in the docker login command
+       I will install a docker pipeline plugin that will help me to login via the jenkins credential id 
+   
+
+
+docker login -u naveenht2025 -p password123456  (I'm exposing my password publicly)
+
+
+
+CI-CD pipeline using docker installed on jenkins host
+
+Extra manual steps required are -->
+1. install docker pipeline plugin on jenkins server
+2. add the credentials for your DockerHub account in the jenkins server with id as dockerhub
+
+pipeline
+{
+	agent any
+	stages
+	{
+		stage('Checkout')
+		{
+			steps
+			{
+				git 'https://github.com/naveenht2025/DevOpsClassCodes.git'
+			}
+		}
+		
+		stage('Compile')
+		{
+			steps
+			{
+				sh 'mvn compile'
+			}
+		}
+
+		stage('Test')
+		{
+			steps
+			{
+				sh 'mvn test'
+			}
+		}
+
+		stage('Build')
+		{
+			steps
+			{
+				sh 'mvn package'
+			}
+		}
+		
+		stage('Build Docker Image')
+		{
+			steps
+			{
+			    sh 'cd /var/lib/jenkins/workspace/$JOB_NAME/'
+			    sh 'cp /var/lib/jenkins/workspace/$JOB_NAME/target/addressbook.war /var/lib/jenkins/workspace/$JOB_NAME/'
+				sh 'docker build -t addressbook:$BUILD_NUMBER .'
+				sh 'docker tag addressbook:$BUILD_NUMBER naveenht2025/addressbook:$BUILD_NUMBER'
+			}
+		}
+
+		stage('Push Docker Image')
+		{ 
+			steps
+			{   
+			    withDockerRegistry([ credentialsId: "dockerhub", url: "" ])
+			    {
+			       sh 'docker push naveenht2025/addressbook:$BUILD_NUMBER'
+			    }
+			}
+		}
+
+		stage('Deploy as container')
+		{
+			steps
+			{
+				sh 'docker run -itd -P naveenht2025/addressbook:$BUILD_NUMBER'
+			}
+		}   
+	}
+		
+}
+====================================
+
+
+
+sh 'cd /var/lib/jenkins/workspace/$JOB_NAME/'   --> by default you are always here 
+sh 'cp /var/lib/jenkins/workspace/$JOB_NAME/target/addressbook.war /var/lib/jenkins/workspace/$JOB_NAME/'
+sh 'docker build -t addressbook:$BUILD_NUMBER .'
+sh 'docker tag addressbook:$BUILD_NUMBER naveenht2025/addressbook:$BUILD_NUMBER'
+
+
+job1
+
+/var/lib/jenkins/workspace/job1
+
+
+/var/lib/jenkins/workspace/job2
+
+/var/lib/jenkins/workspace/job3
+
+
+devops --> 
+
+1. dockerfile (devops team) (is part of codebase)
+
+addressbook.war
+
+apache tomcat --> run the *.war
+
+install tomcat
+copy the war file in the tomcat apps folder 
+start tomcat
+
+your application will be running 
+
+
+dockerfile 
+
+FROM iamdevopstrainer/tomcat:base
+COPY addressbook.war /usr/local/tomcat/webapps/
+CMD ["catalina.sh", "run"]
+
+/var/lib/jenkins/workspace/$JOB_NAME/dockerfile
+/var/lib/jenkins/workspace/$JOB_NAME/target/addressbook.war
+
+/var/lib/jenkins/workspace/$JOB_NAME/docker build 
+
+
+myapp:1.0
+myapp:1.1
+myapp:1.2
+myapp:2.0
+
+docker tag ab:10 ab:1.1
+docker push ab:1.1
+docker run -d --name prod-ab -p 31000:8080 ab:1.1
+
+GCP --> $300 for 3 months
+
+8cpu and 16 GB ram 
+
+4 vm (2 cpu and 4GB)
+
+
+
+
+
+# Use official Tomcat base image
+FROM tomcat:9.0-jdk11
+
+# Copy WAR file to Tomcat webapps directory
+COPY your-app.war /usr/local/tomcat/webapps/
+
+# Copy custom entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Set the entrypoint
+CMD ["/entrypoint.sh"]
+
+
+🔧 entrypoint.sh
+bash
+Copy code
+#!/bin/bash
+
+# Start Tomcat in the background
+catalina.sh start
+
+# Optional: Tail catalina.out to stderr
+tail -n+1 -F /usr/local/tomcat/logs/catalina.out >&2 &
+
+# Tail the application log (assumed to be written to /mnt/your-app.log)
+# Redirect to stderr so it can be picked up by Kubernetes logging
+tail -n+1 -F /mnt/your-app.log >&2 &
+
+# Keep the container running by waiting for background processes
+wait -n
+
